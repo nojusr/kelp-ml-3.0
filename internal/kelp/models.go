@@ -1,8 +1,6 @@
 package kelp
 
-import (
-	"time"
-)
+import "time"
 
 // file that contains all GORM models for
 // kelp.ml

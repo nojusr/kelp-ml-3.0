@@ -1,11 +1,10 @@
 package main
 
 import (
+	"internal/kelp"
 	"log"
 	"net/http"
 	"os"
-
-	"kelp"
 
 	"github.com/gorilla/mux"
 )
