@@ -3,6 +3,7 @@ package kelp
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -25,11 +26,22 @@ func FetchUserStats(w http.ResponseWriter, r *http.Request) {
 func FetchUserUploads(w http.ResponseWriter, r *http.Request) {
 	user := KelpUser{}
 
-	Db.Where(&KelpUser{ApiKey: r.PostFormValue("api_key")}).First(&user)
+	err := Db.Where(&KelpUser{ApiKey: r.PostFormValue("api_key")}).First(&user)
+
+	if err != nil {
+		respondError(w, 404, "user not found")
+		return
+	}
 
 	//Db.Find(&projects)
 	files := []KelpFile{}
-	Db.Where(&KelpFile{UserId: int(user.ID)}).Find(&files)
+
+	err = Db.Where(&KelpFile{UserId: int(user.ID)}).Find(&files)
+
+	if err != nil {
+		respondError(w, 500, "failed to retreive files")
+		return
+	}
 
 	respondJSON(w, 200, files)
 }
@@ -38,11 +50,23 @@ func FetchUserUploads(w http.ResponseWriter, r *http.Request) {
 func FetchUserPastes(w http.ResponseWriter, r *http.Request) {
 	user := KelpUser{}
 
-	Db.Where(&KelpUser{ApiKey: r.PostFormValue("api_key")}).First(&user)
+	err := Db.Where(&KelpUser{ApiKey: r.PostFormValue("api_key")}).First(&user).Error
+
+	log.Println(fmt.Sprintf("user chk: %s, id: %d", user.Username, user.ID))
+
+	if err != nil {
+		respondError(w, 404, "user not found")
+		return
+	}
 
 	//Db.Find(&projects)
 	pastes := []KelpPaste{}
-	Db.Where(&KelpPaste{UserId: int(user.ID)}).Find(&pastes)
+	err = Db.Where(&KelpPaste{UserId: int(user.ID)}).Find(&pastes).Error
+
+	if err != nil {
+		respondError(w, 500, "failed to retreive pastes")
+		return
+	}
 
 	respondJSON(w, 200, pastes)
 }
@@ -58,13 +82,15 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	r.ParseMultipartForm(100 << 20)
 
-	file, handler, err := r.FormFile("u_file")
+	file, _, err := r.FormFile("u_file")
 
 	if err != nil {
 		fmt.Println("Error Retrieving the File")
 		fmt.Println(err)
 		return
 	}
+
+	defer file.Close()
 }
 
 // delete a file

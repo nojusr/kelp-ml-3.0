@@ -20,11 +20,24 @@ func init_log() {
 
 func main() {
 	init_log()
+	kelp.InitializeDatabase()
 
 	// router
 	r := mux.NewRouter()
 
-	// frontend handler
+	// API handlers
+	r.HandleFunc("/api/fetch/stats", kelp.FetchSiteStats)
+	r.HandleFunc("/api/fetch/user", kelp.FetchUserStats)
+	r.HandleFunc("/api/fetch/user/files", kelp.FetchUserUploads)
+	r.HandleFunc("/api/fetch/user/pastes", kelp.FetchUserPastes)
+	r.HandleFunc("/api/upload", kelp.UploadFile)
+	r.HandleFunc("/api/upload/delete", kelp.DeleteFile)
+	r.HandleFunc("/api/upload/delete/all", kelp.DeleteAllFiles)
+	r.HandleFunc("/api/paste", kelp.UploadPaste)
+	r.HandleFunc("/api/paste/delete", kelp.DeletePaste)
+	r.HandleFunc("/api/paste/delete/all", kelp.DeleteAllPastes)
+
+	// frontend handlers
 	r.HandleFunc("/", kelp.RootHandler)
 
 	// file handler
@@ -35,6 +48,4 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//log.Println("Hello, world!")
-	//fmt.Println("Hello, Arch!")
 }
