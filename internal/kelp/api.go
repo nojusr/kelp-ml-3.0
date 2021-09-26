@@ -3,8 +3,16 @@ package kelp
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+	"unicode/utf8"
+	"unsafe"
 )
 
 // get global site stats.
@@ -78,15 +86,58 @@ func FetchUserPastes(w http.ResponseWriter, r *http.Request) {
 func UploadFile(w http.ResponseWriter, r *http.Request) {
 	user := KelpUser{}
 
-	Db.Where(&KelpUser{ApiKey: r.PostFormValue("api_key")}).First(&user)
-
-	r.ParseMultipartForm(100 << 20)
-
-	file, _, err := r.FormFile("u_file")
+	err := Db.Where(&KelpUser{ApiKey: r.PostFormValue("api_key")}).First(&user).Error
 
 	if err != nil {
-		fmt.Println("Error Retrieving the File")
-		fmt.Println(err)
+		respondError(w, 404, "user not found")
+		return
+	}
+
+	err = r.ParseMultipartForm(100 << 20)
+
+	if err != nil {
+		respondError(w, 500, "file too large (limit: 100mb)")
+		return
+	}
+
+	file, handler, err := r.FormFile("u_file")
+
+	if err != nil {
+		respondError(w, 500, "file not found")
+		return
+	}
+
+	// read all of the contents of our uploaded file into a
+	// byte array
+	fileBytes, err := ioutil.ReadAll(file)
+	if err != nil {
+		respondError(w, 500, "failed to read file")
+		return
+	}
+
+	filename := generateRandomString(6)
+	fileType := trimFirstRune(filepath.Ext(handler.Filename)) // trimmed in order to preserve db structure
+	orgName := strings.Split(handler.Filename, ".")[0]
+
+	err = ioutil.WriteFile(fmt.Sprintf("./static/u/%s.%s", filename, fileType), fileBytes, 0444)
+
+	if err != nil {
+		respondError(w, 500, "failed to write file")
+		return
+	}
+
+	newFile := KelpFile{
+		UserId:  int(user.ID),
+		Type:    fileType,
+		Name:    filename,
+		OrgName: orgName,
+	}
+
+	err = Db.Create(&newFile).Error
+
+	if err != nil {
+		respondError(w, 500, "failed to add db entry")
+		os.Remove(fmt.Sprintf("./static/u/%s.%s", filename, fileType))
 		return
 	}
 
@@ -134,4 +185,39 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 // common call to return a JSON error
 func respondError(w http.ResponseWriter, code int, message string) {
 	respondJSON(w, code, map[string]string{"error": message})
+}
+
+// https://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-go
+// generates random str of length n, and is apparantly super fast. i dont care enough to go in-depth about this
+// so i'm keeping this as-is.
+func generateRandomString(n int) string {
+	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456"
+	const (
+		letterIdxBits = 6                    // 6 bits to represent a letter index
+		letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
+		letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+	)
+
+	var src = rand.NewSource(time.Now().UnixNano())
+
+	b := make([]byte, n)
+	// A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
+	for i, cache, remain := n-1, src.Int63(), letterIdxMax; i >= 0; {
+		if remain == 0 {
+			cache, remain = src.Int63(), letterIdxMax
+		}
+		if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
+			b[i] = letterBytes[idx]
+			i--
+		}
+		cache >>= letterIdxBits
+		remain--
+	}
+
+	return *(*string)(unsafe.Pointer(&b))
+}
+
+func trimFirstRune(s string) string {
+	_, i := utf8.DecodeRuneInString(s)
+	return s[i:]
 }
